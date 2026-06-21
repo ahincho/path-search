@@ -31,12 +31,12 @@ from grid_path_benchmark.visualization import render_scenario_result
 # Color constants (local shortcuts)
 # ---------------------------------------------------------------------------
 
-_R = Style.RESET_ALL
-_D = Style.DIM
-_H = Style.BRIGHT
-_CYAN = Fore.CYAN + Style.BRIGHT
-_GREEN = Fore.GREEN + Style.BRIGHT
-_YELLOW = Fore.YELLOW + Style.BRIGHT
+_R = Style.RESET_ALL          # reset all
+_D = Fore.LIGHTBLACK_EX       # dark gray — secondary text
+_H = Style.BRIGHT              # bold — emphasis
+_CYAN = Fore.LIGHTCYAN_EX      # headers, banners, step markers
+_GREEN = Fore.LIGHTGREEN_EX    # success, optimal
+_YELLOW = Fore.LIGHTYELLOW_EX  # algo names, list items
 
 
 def _configure_encoding() -> None:

@@ -45,13 +45,13 @@ from search_library.heuristics.euclidean import EuclideanHeuristic
 # Color constants (module-level for reuse across all format functions)
 # ---------------------------------------------------------------------------
 
-_R = Style.RESET_ALL       # reset all
-_D = Style.DIM             # dim / subtle
-_H = Style.BRIGHT          # bold / bright
-_CYAN = Fore.CYAN + Style.BRIGHT
-_GREEN = Fore.GREEN + Style.BRIGHT
-_RED = Fore.RED
-_YELLOW = Fore.YELLOW + Style.BRIGHT
+_R = Style.RESET_ALL          # reset all
+_D = Fore.LIGHTBLACK_EX       # dark gray — secondary text (descriptions, separators)
+_H = Style.BRIGHT              # bold — headers and key values
+_CYAN = Fore.LIGHTCYAN_EX      # section titles, scenario names
+_GREEN = Fore.LIGHTGREEN_EX    # optimal / success
+_RED = Fore.LIGHTRED_EX        # suboptimal / failure
+_YELLOW = Fore.LIGHTYELLOW_EX  # bullets, warnings
 
 
 # ---------------------------------------------------------------------------

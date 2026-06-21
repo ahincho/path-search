@@ -28,18 +28,18 @@ from search_library.grid.grid import Position
 # ---------------------------------------------------------------------------
 
 _R = Style.RESET_ALL
-_D = Style.DIM
+_D = Fore.LIGHTBLACK_EX   # dark gray — secondary elements (row/col numbers, legend labels)
 _H = Style.BRIGHT
 
-# Cell-type color styles — applied before the character, _R after
+# Cell-type color styles — tuned for dark/black terminal backgrounds
 _CELL_STYLE: dict[str, str] = {
-    "S": Fore.GREEN + Style.BRIGHT,
-    "G": Fore.MAGENTA + Style.BRIGHT,
-    "*": Fore.YELLOW + Style.BRIGHT,
-    "·": Fore.CYAN + Style.DIM,
-    "█": Style.DIM,
-    "~": Fore.YELLOW,
-    "≈": Fore.BLUE + Style.BRIGHT,
+    "S": Fore.LIGHTGREEN_EX,    # bright green  — start
+    "G": Fore.LIGHTRED_EX,      # bright red    — goal
+    "*": Fore.LIGHTCYAN_EX,     # bright cyan   — path
+    "·": Fore.WHITE,            # white         — explored
+    "█": Fore.LIGHTWHITE_EX,    # bright white  — obstacle
+    "~": Fore.LIGHTYELLOW_EX,   # bright yellow — difficult terrain
+    "≈": Fore.LIGHTBLUE_EX,     # light blue    — water
 }
 
 
