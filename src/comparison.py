@@ -1,8 +1,8 @@
 """Algorithm comparison engine for grid pathfinding benchmarks.
 
 This module provides structured comparison of search algorithms on grid
-scenarios, collecting metrics and generating formatted output suitable
-for academic analysis and reproducible experiments.
+scenarios, collecting metrics and generating colored formatted output
+suitable for academic analysis and reproducible experiments.
 
 Metrics collected per algorithm per scenario:
 - Path found (success/failure)
@@ -18,6 +18,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
+from colorama import Fore, Style
 from grid_path_benchmark.grid_data import (
     GridScenario,
     generate_bug_trap_grid,
@@ -39,6 +40,19 @@ from search_library.grid.grid import Position
 from search_library.grid.grid_search import GridSearchProblem
 from search_library.heuristics.base import Heuristic
 from search_library.heuristics.euclidean import EuclideanHeuristic
+
+# ---------------------------------------------------------------------------
+# Color constants (module-level for reuse across all format functions)
+# ---------------------------------------------------------------------------
+
+_R = Style.RESET_ALL       # reset all
+_D = Style.DIM             # dim / subtle
+_H = Style.BRIGHT          # bold / bright
+_CYAN = Fore.CYAN + Style.BRIGHT
+_GREEN = Fore.GREEN + Style.BRIGHT
+_RED = Fore.RED
+_YELLOW = Fore.YELLOW + Style.BRIGHT
+
 
 # ---------------------------------------------------------------------------
 # Result Data Structures
@@ -94,11 +108,7 @@ class ScenarioReport:
 
 @dataclass
 class BenchmarkReport:
-    """Complete benchmark report across all scenarios.
-
-    Attributes:
-        scenario_reports: Results for each scenario.
-    """
+    """Complete benchmark report across all scenarios."""
 
     scenario_reports: list[ScenarioReport] = field(default_factory=list)
 
@@ -116,10 +126,10 @@ class BenchmarkReport:
 def select_heuristic(scenario: GridScenario) -> Heuristic[Position]:
     """Select the optimal heuristic for a given scenario.
 
-    Heuristic selection rules:
-    - 4-directional uniform cost -> Manhattan (exact for obstacle-free)
-    - 8-directional with sqrt(2) diagonal -> Octile (exact for obstacle-free)
-    - Weighted grids -> Euclidean (admissible, conservative)
+    Rules:
+    - 4-dir uniform cost  → Manhattan (exact for obstacle-free)
+    - 8-dir sqrt(2) diag  → Octile (exact for obstacle-free)
+    - Weighted grids      → Euclidean (admissible, conservative)
 
     Args:
         scenario: The grid scenario configuration.
@@ -128,7 +138,6 @@ def select_heuristic(scenario: GridScenario) -> Heuristic[Position]:
         The most appropriate Heuristic instance.
     """
     if scenario.weighted:
-        # Euclidean is admissible for weighted grids since cell costs >= 1
         return EuclideanHeuristic()
     if scenario.allow_diagonal:
         return OctileHeuristic()
@@ -141,19 +150,7 @@ def select_heuristic(scenario: GridScenario) -> Heuristic[Position]:
 
 
 def run_scenario_comparison(scenario: GridScenario) -> ScenarioReport:
-    """Execute all algorithms on a single grid scenario and compare results.
-
-    Runs BFS, DFS, Dijkstra, A*, and Bidirectional on the same grid,
-    collecting performance metrics for each. The optimal cost is
-    determined by Dijkstra (guaranteed optimal for non-negative costs).
-
-    Args:
-        scenario: The GridScenario to benchmark.
-
-    Returns:
-        ScenarioReport with individual results and optimal cost reference.
-    """
-    # Generate the grid
+    """Execute all algorithms on a single grid scenario and compare results."""
     if scenario.name == "Bug Trap (20x20)":
         grid = generate_bug_trap_grid(
             scenario.rows, scenario.cols, allow_diagonal=scenario.allow_diagonal
@@ -169,7 +166,6 @@ def run_scenario_comparison(scenario: GridScenario) -> ScenarioReport:
 
     results: list[AlgorithmResult] = []
 
-    # Check if start == goal (trivial case)
     if start == goal:
         trivial = AlgorithmResult(
             algorithm_name="All (trivial)",
@@ -181,64 +177,17 @@ def run_scenario_comparison(scenario: GridScenario) -> ScenarioReport:
             is_optimal=True,
             success=True,
         )
-        return ScenarioReport(
-            scenario=scenario,
-            optimal_cost=0.0,
-            results=[trivial],
-            grid=grid,
-        )
+        return ScenarioReport(scenario=scenario, optimal_cost=0.0, results=[trivial], grid=grid)
 
-    # --- 1. Dijkstra (baseline: guaranteed optimal) ---
-    dijkstra_result = _run_timed(
-        "Dijkstra",
-        grid,
-        start,
-        goal,
-        heuristic=None,  # Dijkstra uses no heuristic
-    )
+    dijkstra_result = _run_timed("Dijkstra", grid, start, goal, heuristic=None)
     results.append(dijkstra_result)
     optimal_cost = dijkstra_result.total_cost if dijkstra_result.success else 0.0
 
-    # --- 2. A* Search (informed: optimal with admissible heuristic) ---
-    astar_result = _run_timed(
-        "A*",
-        grid,
-        start,
-        goal,
-        heuristic=heuristic,
-    )
-    results.append(astar_result)
+    results.append(_run_timed("A*", grid, start, goal, heuristic=heuristic))
+    results.append(_run_timed("BFS", grid, start, goal, heuristic=None))
+    results.append(_run_timed("DFS", grid, start, goal, heuristic=None))
+    results.append(_run_timed_bidirectional("Bidirectional", grid, start, goal))
 
-    # --- 3. BFS (uninformed: optimal by hop count, not by cost) ---
-    bfs_result = _run_timed(
-        "BFS",
-        grid,
-        start,
-        goal,
-        heuristic=None,
-    )
-    results.append(bfs_result)
-
-    # --- 4. DFS (uninformed: no optimality guarantee) ---
-    dfs_result = _run_timed(
-        "DFS",
-        grid,
-        start,
-        goal,
-        heuristic=None,
-    )
-    results.append(dfs_result)
-
-    # --- 5. Bidirectional BFS ---
-    bidir_result = _run_timed_bidirectional(
-        "Bidirectional",
-        grid,
-        start,
-        goal,
-    )
-    results.append(bidir_result)
-
-    # Mark optimality for each result
     final_results = [
         AlgorithmResult(
             algorithm_name=r.algorithm_name,
@@ -254,129 +203,129 @@ def run_scenario_comparison(scenario: GridScenario) -> ScenarioReport:
     ]
 
     return ScenarioReport(
-        scenario=scenario,
-        optimal_cost=optimal_cost,
-        results=final_results,
-        grid=grid,
+        scenario=scenario, optimal_cost=optimal_cost, results=final_results, grid=grid
     )
 
 
 def run_full_benchmark(scenarios: list[GridScenario]) -> BenchmarkReport:
-    """Execute the full benchmark suite across all scenarios.
-
-    Args:
-        scenarios: List of GridScenario configurations.
-
-    Returns:
-        BenchmarkReport containing all scenario results.
-    """
+    """Execute the full benchmark suite across all scenarios."""
     report = BenchmarkReport()
     for scenario in scenarios:
-        scenario_report = run_scenario_comparison(scenario)
-        report.scenario_reports.append(scenario_report)
+        report.scenario_reports.append(run_scenario_comparison(scenario))
     return report
 
 
 # ---------------------------------------------------------------------------
-# Formatting
+# Formatting (colored)
 # ---------------------------------------------------------------------------
 
 
 def format_scenario_table(report: ScenarioReport) -> str:
-    """Format a scenario report as a readable ASCII table.
+    """Format a scenario report as a colored ASCII table.
 
     Args:
         report: The ScenarioReport to format.
 
     Returns:
-        Multi-line string with formatted comparison table.
+        Multi-line colored string with the comparison table.
     """
     lines: list[str] = []
 
-    lines.append(f"  Scenario: {report.scenario.name}")
-    lines.append(f"  {report.scenario.description}")
-    lines.append(f"  Grid: {report.scenario.rows}x{report.scenario.cols}")
-    lines.append(f"  Start: {report.scenario.start} → Goal: {report.scenario.goal}")
+    # Scenario header
+    lines.append(f"  {_CYAN}Scenario: {_H}{report.scenario.name}{_R}")
+    lines.append(f"  {_D}{report.scenario.description}{_R}")
+    lines.append(
+        f"  Grid: {_H}{report.scenario.rows}x{report.scenario.cols}{_R}"
+        f"  |  Start: {_H}{report.scenario.start}{_R}"
+        f"  →  Goal: {_H}{report.scenario.goal}{_R}"
+    )
     if report.optimal_cost > 0:
-        lines.append(f"  Optimal cost (Dijkstra): {report.optimal_cost:.2f}")
+        lines.append(
+            f"  {_D}Optimal cost (Dijkstra):{_R} {_GREEN}{report.optimal_cost:.2f}{_R}"
+        )
     lines.append("")
 
-    # Table header
-    header = (
-        f"  {'Algorithm':<15} {'Cost':<10} {'Path Len':<10} "
-        f"{'Nodes':<10} {'Time (ms)':<12} {'Optimal':<8}"
+    # Table header — format plain strings first, then wrap in bold
+    h_algo  = f"{'Algorithm':<15}"
+    h_cost  = f"{'Cost':<10}"
+    h_plen  = f"{'Path Len':<10}"
+    h_nodes = f"{'Nodes':<10}"
+    h_time  = f"{'Time (ms)':<12}"
+    h_opt   = "Optimal"
+    lines.append(
+        f"  {_H}{h_algo} {h_cost} {h_plen} {h_nodes} {h_time} {h_opt}{_R}"
     )
-    lines.append(header)
-    lines.append("  " + "-" * 70)
+    lines.append(f"  {_D}{'-' * 70}{_R}")
 
     for result in report.results:
+        # Format all numeric fields as plain strings (preserves alignment)
+        algo_str  = f"{result.algorithm_name:<15}"
         if result.success:
-            optimal_mark = "✓" if result.is_optimal else "✗"
-            row = (
-                f"  {result.algorithm_name:<15} "
-                f"{result.total_cost:<10.2f} "
-                f"{result.path_length:<10} "
-                f"{result.nodes_explored:<10} "
-                f"{result.execution_time_ms:<12.4f} "
-                f"{optimal_mark:<8}"
+            cost_str  = f"{result.total_cost:<10.2f}"
+            plen_str  = f"{result.path_length:<10}"
+            nodes_str = f"{result.nodes_explored:<10}"
+            time_str  = f"{result.execution_time_ms:<12.4f}"
+            opt_mark  = (
+                f"{_GREEN}✓{_R}" if result.is_optimal else f"{_RED}✗{_R}"
+            )
+            lines.append(
+                f"  {algo_str} {cost_str} {plen_str} {nodes_str} {time_str} {opt_mark}"
             )
         else:
-            row = (
-                f"  {result.algorithm_name:<15} "
-                f"{'N/A':<10} {'N/A':<10} "
-                f"{result.nodes_explored:<10} "
-                f"{result.execution_time_ms:<12.4f} "
-                f"{'—':<8}"
+            nodes_str = f"{result.nodes_explored:<10}"
+            time_str  = f"{result.execution_time_ms:<12.4f}"
+            lines.append(
+                f"  {_D}{algo_str} {'N/A':<10} {'N/A':<10}"
+                f" {nodes_str} {time_str} —{_R}"
             )
-        lines.append(row)
 
     lines.append("")
     return "\n".join(lines)
 
 
 def format_full_report(benchmark: BenchmarkReport) -> str:
-    """Format the complete benchmark report.
+    """Format the complete benchmark report with colored headers.
 
     Args:
         benchmark: The full BenchmarkReport.
 
     Returns:
-        Multi-line formatted string with all scenario results.
+        Multi-line colored string with all scenario results.
     """
     lines: list[str] = []
 
-    lines.append("=" * 80)
-    lines.append("  GRID SEARCH BENCHMARK — Algorithm Comparison Report")
-    lines.append("  search-library v1.0.0 | grid-path-benchmark v1.0.0")
-    lines.append("=" * 80)
+    lines.append(f"{_CYAN}{'=' * 80}{_R}")
+    lines.append(f"  {_CYAN}GRID SEARCH BENCHMARK{_R} {_D}— Algorithm Comparison Report{_R}")
+    lines.append(f"  {_D}search-library v1.0.0 | grid-path-benchmark v1.0.0{_R}")
+    lines.append(f"{_CYAN}{'=' * 80}{_R}")
     lines.append("")
 
     for i, scenario_report in enumerate(benchmark.scenario_reports, 1):
-        lines.append(f"{'─' * 80}")
-        lines.append(f"  [{i}/{benchmark.total_scenarios}]")
+        lines.append(f"{_D}{'─' * 80}{_R}")
+        lines.append(f"  {_D}[{i}/{benchmark.total_scenarios}]{_R}")
         lines.append(format_scenario_table(scenario_report))
 
     return "\n".join(lines)
 
 
 def format_academic_analysis(benchmark: BenchmarkReport) -> str:
-    """Generate academic analysis explaining benchmark results.
+    """Generate colored academic analysis explaining benchmark results.
 
     Args:
         benchmark: The full BenchmarkReport.
 
     Returns:
-        Multi-line academic analysis string.
+        Multi-line colored academic analysis string.
     """
     lines: list[str] = []
-    lines.append("=" * 80)
-    lines.append("  ACADEMIC ANALYSIS")
-    lines.append("=" * 80)
+    lines.append(f"{_CYAN}{'=' * 80}{_R}")
+    lines.append(f"  {_CYAN}ACADEMIC ANALYSIS{_R}")
+    lines.append(f"{_CYAN}{'=' * 80}{_R}")
     lines.append("")
 
-    # 1. A* vs Dijkstra efficiency comparison
-    lines.append("  1. A* vs Dijkstra — Effect of Heuristic Guidance")
-    lines.append("  " + "-" * 60)
+    # 1. A* vs Dijkstra
+    lines.append(f"  {_H}1. A* vs Dijkstra — Effect of Heuristic Guidance{_R}")
+    lines.append(f"  {_D}{'-' * 60}{_R}")
     astar_savings: list[str] = []
     for sr in benchmark.scenario_reports:
         dijkstra = next((r for r in sr.results if r.algorithm_name == "Dijkstra"), None)
@@ -385,99 +334,89 @@ def format_academic_analysis(benchmark: BenchmarkReport) -> str:
             dijkstra and astar and dijkstra.success and astar.success
             and dijkstra.nodes_explored > 0
         ):
-                savings = (
-                    (dijkstra.nodes_explored - astar.nodes_explored)
-                    / dijkstra.nodes_explored
-                    * 100
-                )
-                astar_savings.append(
-                    f"    {sr.scenario.name}: "
-                    f"A* explored {astar.nodes_explored} vs Dijkstra {dijkstra.nodes_explored} "
-                    f"({savings:.0f}% fewer nodes)"
-                )
-    if astar_savings:
-        lines.extend(astar_savings)
+            savings = (
+                (dijkstra.nodes_explored - astar.nodes_explored)
+                / dijkstra.nodes_explored * 100
+            )
+            color = _GREEN if savings >= 50 else _YELLOW
+            astar_savings.append(
+                f"    {sr.scenario.name}: "
+                f"A* {_H}{astar.nodes_explored}{_R} vs Dijkstra {_H}{dijkstra.nodes_explored}{_R}"
+                f" nodes  ({color}{savings:.0f}% fewer{_R})"
+            )
+    lines.extend(astar_savings)
     lines.append("")
-    lines.append("    Conclusion: A* consistently explores fewer or equal nodes than Dijkstra")
-    lines.append("    while finding the same optimal cost. The heuristic prunes unpromising")
-    lines.append("    branches, with greater savings on larger grids.")
+    lines.append(
+        f"    {_D}Conclusion: A* consistently explores fewer or equal nodes than Dijkstra{_R}"
+    )
+    lines.append(
+        f"    {_D}while finding the same optimal cost. Greater savings on larger grids.{_R}"
+    )
     lines.append("")
 
     # 2. BFS limitations in weighted grids
-    lines.append("  2. BFS in Weighted Grids — Cost vs Hop-Count Optimality")
-    lines.append("  " + "-" * 60)
+    lines.append(f"  {_H}2. BFS in Weighted Grids — Cost vs Hop-Count Optimality{_R}")
+    lines.append(f"  {_D}{'-' * 60}{_R}")
     for sr in benchmark.scenario_reports:
         if sr.scenario.weighted:
             bfs = next((r for r in sr.results if r.algorithm_name == "BFS"), None)
             if bfs and bfs.success and sr.optimal_cost > 0:
-                cost_ratio = bfs.total_cost / sr.optimal_cost
+                ratio = bfs.total_cost / sr.optimal_cost
                 lines.append(
-                    f"    {sr.scenario.name}: BFS cost = {bfs.total_cost:.2f} "
-                    f"(optimal = {sr.optimal_cost:.2f}, ratio = {cost_ratio:.2f}x)"
+                    f"    {sr.scenario.name}: BFS cost = {_RED}{bfs.total_cost:.2f}{_R}"
+                    f"  (optimal = {_GREEN}{sr.optimal_cost:.2f}{_R}, ratio = {_H}{ratio:.2f}x{_R})"
                 )
-    lines.append("")
-    lines.append("    BFS minimizes hop count (edge count), not total traversal cost.")
-    lines.append("    In weighted grids this produces suboptimal paths since it ignores")
-    lines.append("    terrain difficulty when choosing which path to take.")
+    lines.append(f"    {_D}BFS minimizes hop count, not cost — produces suboptimal paths on weighted grids.{_R}")
     lines.append("")
 
     # 3. DFS non-optimality
-    lines.append("  3. DFS — First Path Found vs Optimal Path")
-    lines.append("  " + "-" * 60)
+    lines.append(f"  {_H}3. DFS — First Path Found vs Optimal Path{_R}")
+    lines.append(f"  {_D}{'-' * 60}{_R}")
     for sr in benchmark.scenario_reports:
         dfs = next((r for r in sr.results if r.algorithm_name == "DFS"), None)
         if dfs and dfs.success and sr.optimal_cost > 0:
             ratio = dfs.total_cost / sr.optimal_cost
+            color = _RED if ratio > 2 else _YELLOW
             lines.append(
-                f"    {sr.scenario.name}: DFS cost = {dfs.total_cost:.2f} "
-                f"(ratio = {ratio:.2f}x optimal)"
+                f"    {sr.scenario.name}: DFS cost = {_H}{dfs.total_cost:.2f}{_R}"
+                f"  ({color}{ratio:.2f}x optimal{_R})"
             )
-    lines.append("")
-    lines.append("    DFS explores depth-first and returns the first path found.")
-    lines.append("    Results depend entirely on successor ordering, not path quality.")
+    lines.append(f"    {_D}DFS returns the first path found — result depends on successor ordering.{_R}")
     lines.append("")
 
-    # 4. Heuristic comparison
-    lines.append("  4. Heuristic Selection — Manhattan vs Octile vs Euclidean")
-    lines.append("  " + "-" * 60)
-    lines.append("    • Manhattan: exact for 4-dir uniform-cost grids")
-    lines.append("    • Octile: exact for 8-dir grids with √2 diagonal cost")
-    lines.append("    • Euclidean: admissible universally, but less tight than Octile")
-    lines.append("    • Chebyshev: exact for 8-dir uniform-cost (all moves cost 1)")
-    lines.append("")
-    lines.append("    Tighter heuristics reduce node expansions. The octile heuristic")
-    lines.append("    outperforms Euclidean on 8-directional grids because it accounts")
-    lines.append("    for the actual movement model (diagonal costs √2, not 1).")
+    # 4. Heuristic selection
+    lines.append(f"  {_H}4. Heuristic Selection Guide{_R}")
+    lines.append(f"  {_D}{'-' * 60}{_R}")
+    lines.append(f"    {_YELLOW}•{_R} {_H}Manhattan{_R}  — exact for 4-dir uniform-cost grids")
+    lines.append(f"    {_YELLOW}•{_R} {_H}Octile{_R}     — exact for 8-dir grids with √2 diagonal cost")
+    lines.append(f"    {_YELLOW}•{_R} {_H}Euclidean{_R}  — admissible universally, less tight than Octile")
+    lines.append(f"    {_YELLOW}•{_R} {_H}Chebyshev{_R}  — exact for 8-dir uniform-cost (all moves cost 1)")
     lines.append("")
 
     # 5. Obstacle density impact
-    lines.append("  5. Obstacle Density Impact on Search Effort")
-    lines.append("  " + "-" * 60)
-    density_data: list[tuple[str, float, int]] = []
+    lines.append(f"  {_H}5. Obstacle Density Impact on Search Effort{_R}")
+    lines.append(f"  {_D}{'-' * 60}{_R}")
     for sr in benchmark.scenario_reports:
         astar = next((r for r in sr.results if r.algorithm_name == "A*"), None)
         if astar and astar.success:
-            density_data.append(
-                (sr.scenario.name, sr.scenario.obstacle_density, astar.nodes_explored)
+            lines.append(
+                f"    {sr.scenario.name}: "
+                f"density={_H}{sr.scenario.obstacle_density:.0%}{_R}, "
+                f"A* expanded {_H}{astar.nodes_explored}{_R} nodes"
             )
-    for name, density, nodes in density_data:
-        lines.append(f"    {name}: density={density:.0%}, A* expanded {nodes} nodes")
-    lines.append("")
-    lines.append("    Higher obstacle density increases path complexity and search effort.")
-    lines.append("    Algorithms must explore more alternatives when direct paths are blocked.")
+    lines.append(f"    {_D}Higher density → longer detours → more nodes expanded.{_R}")
     lines.append("")
 
-    # Conclusion
-    lines.append("  CONCLUSIONS")
-    lines.append("  " + "=" * 60)
-    lines.append("  For 2D grid pathfinding:")
-    lines.append("  • A* with tight heuristic is the best general choice (optimal + efficient)")
-    lines.append("  • Dijkstra guarantees optimality but explores more nodes")
-    lines.append("  • BFS is only cost-optimal on uniform-cost grids")
-    lines.append("  • DFS is unsuitable for shortest-path problems")
-    lines.append("  • Bidirectional BFS halves search space on uniform-cost grids")
-    lines.append("  • Heuristic choice directly impacts performance:")
-    lines.append("    - Use Manhattan for 4-dir, Octile for 8-dir with √2 diagonal")
+    # Conclusions
+    lines.append(f"  {_CYAN}{'=' * 60}{_R}")
+    lines.append(f"  {_CYAN}CONCLUSIONS — For 2D grid pathfinding:{_R}")
+    lines.append(f"  {_CYAN}{'=' * 60}{_R}")
+    lines.append(f"  {_YELLOW}•{_R} {_GREEN}A* + tight heuristic{_R} — optimal and efficient (best general choice)")
+    lines.append(f"  {_YELLOW}•{_R} Dijkstra            — guarantees optimality, explores more nodes")
+    lines.append(f"  {_YELLOW}•{_R} BFS                 — cost-optimal {_H}only{_R} on uniform-cost grids")
+    lines.append(f"  {_YELLOW}•{_R} DFS                 — unsuitable for shortest-path problems")
+    lines.append(f"  {_YELLOW}•{_R} Bidirectional BFS   — halves search space on uniform-cost grids")
+    lines.append(f"    {_D}Use Manhattan for 4-dir, Octile for 8-dir with √2 diagonal cost.{_R}")
     lines.append("")
 
     return "\n".join(lines)
@@ -522,7 +461,7 @@ def _run_timed(
         path_length=result.path_length,
         nodes_explored=result.nodes_explored,
         execution_time_ms=elapsed_ms,
-        is_optimal=False,  # Will be set later
+        is_optimal=False,
         success=result.success,
     )
 

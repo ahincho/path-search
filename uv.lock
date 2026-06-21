@@ -55,6 +55,7 @@ name = "grid-path-benchmark"
 version = "1.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "colorama" },
     { name = "search-library" },
 ]
 
@@ -66,7 +67,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "search-library", specifier = ">=1.0.0" }]
+requires-dist = [
+    { name = "colorama", specifier = ">=0.4.6" },
+    { name = "search-library", specifier = ">=1.0.0" },
+]
 
 [package.metadata.requires-dev]
 dev = [

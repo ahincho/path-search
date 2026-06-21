@@ -18,6 +18,7 @@ classifiers = [
 ]
 dependencies = [
     "search-library>=1.0.0",
+    "colorama>=0.4.6",
 ]
 
 [project.scripts]
